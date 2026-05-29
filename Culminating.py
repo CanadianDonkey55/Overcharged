@@ -1,7 +1,7 @@
 # Programmer(s): Devin Murphy, Jayden Li
 # Date:
 # Description: Game about surviving a shift on a damaged space station.
-
+import random
 import pygame
 from pygame import *
 from pygame.sprite import *
@@ -26,6 +26,19 @@ pygame.init()
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 clock = pygame.time.Clock()
 
+MAIN_MENU = "main_menu"
+IN_GAME = "in_game"
+scene = MAIN_MENU
+
+EASY = 15000
+MEDIUM = 10000
+HARD = 5000
+currentDifficulty = EASY
+
+# Timer creation
+TIMER_EVENT = pygame.USEREVENT + 1
+pygame.time.set_timer(TIMER_EVENT, currentDifficulty)
+
 ### ADD YOUR SPRITE CLASSES HERE ###
 
 class ImageSprite(Sprite):
@@ -40,11 +53,14 @@ class ImageSprite(Sprite):
        ### ADD MOVEMENT MODIFIERS HERE ###
        self.rect.x += 5
        self.rect.y -= 2
-       self.rect.center = (self.rect.x//2,self.rect.y//2
+       self.rect.center = (self.rect.x//2,self.rect.y//2)
 
    def setPosition(self, x, y):
        self.rect.x = x
        self.rect.y = y
+
+   def changeImage(self, filename):
+       self.image = image.load(filename).convert()
 
 class PlayerSprite(ImageSprite):
    def moveHorizontal(self, direction):
@@ -58,8 +74,46 @@ player = PlayerSprite(0, 0, "mario.png")
 player.image = pygame.transform.scale_by(player.image, 0.3)
 player.setPosition(screen.get_width() / 2, screen.get_height() / 2)
 
+dice1 = "Assets/Sprites/Dice/Dice1.png"
+dice2 = "Assets/Sprites/Dice/Dice2.png"
+dice3 = "Assets/Sprites/Dice/Dice3.png"
+dice4 = "Assets/Sprites/Dice/Dice4.png"
+dice5 = "Assets/Sprites/Dice/Dice5.png"
+dice6 = "Assets/Sprites/Dice/Dice6.png"
+emptyDice = "Assets/Sprites/Dice/EmptyDice.png"
+
+dice = ImageSprite(0, 0, emptyDice)
+dice.image = pygame.transform.scale_by(dice.image, 5)
+dice.setPosition(1800, 950)
+
+### SOUND INITIALIZATION ###
+diceRollSound = pygame.mixer.Sound("Assets/Audio/DiceRoll.mp3")
+
+### OTHER CLASSES OR FUNCTIONS ###
+def rollDice(numberOfDice):
+    number = 0
+    for i in range(numberOfDice):
+        number += random.randint(1, 6)
+    diceRollSound.play()
+    return number
+
+def changeDiceImage(num):
+    if num == 1:
+        dice.changeImage(dice1)
+    elif num == 2:
+        dice.changeImage(dice2)
+    elif num == 3:
+        dice.changeImage(dice3)
+    elif num == 4:
+        dice.changeImage(dice4)
+    elif num == 5:
+        dice.changeImage(dice5)
+    elif num == 6:
+        dice.changeImage(dice6)
+    dice.image = pygame.transform.scale_by(dice.image, 5)
+
 # group sprites
-allSprites = pygame.sprite.Group(player)
+allSprites = pygame.sprite.Group(player, dice)
 
 # game loop
 running = True
@@ -70,6 +124,9 @@ while running:
     for event in pygame.event.get():
         if event.type == QUIT:
             running = False
+        elif event.type == TIMER_EVENT:
+            currentDiceNumber = rollDice(1)
+            changeDiceImage(currentDiceNumber)
 
         ### ADD ANY OTHER EVENTS HERE (KEYS, MOUSE, ETC.) ###
 
