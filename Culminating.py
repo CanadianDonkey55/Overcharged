@@ -12,6 +12,9 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+DARK_GREY = (40, 44, 52)      # Station flooring color
+LIGHT_GREY = (90, 95, 105)    # Station wall color
+GRID_LINE = (30, 30, 35)      # Grid overlay lines
 ### ADD ANY OTHER COLOUR CONSTANTS HERE ###
 
 # define system constants
@@ -20,6 +23,9 @@ FPS = 60
 WIDTH = 640
 HEIGHT = 480
 BGCOLOUR = BLACK ### CHANGE AS NEEDED ###
+
+# Changes the size of the tiles
+TILE_SIZE = 128
 
 # initialize pygame, create window, start the clock
 pygame.init()
@@ -39,40 +45,66 @@ currentDifficulty = EASY
 TIMER_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(TIMER_EVENT, currentDifficulty)
 
+# MAP LAYOUT DATA
+# 0 = Normal Floor, 1 = Obstacle
+# Calculates the sizes to fill up the entire window
+COLS = screen.get_width() // TILE_SIZE + 1
+ROWS = screen.get_height() // TILE_SIZE + 1
+
+# Map is 15 wide, 9 tall
+gridMap = [
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+]
+
+wallRects = []
+for rowIndex, row in enumerate(gridMap):
+    for columnIndex, tileType in enumerate(row):
+        if tileType == 1:
+            x = columnIndex * TILE_SIZE
+            y = rowIndex * TILE_SIZE
+            wallRects.append(pygame.Rect(x, y, TILE_SIZE, TILE_SIZE))
+
 ### ADD YOUR SPRITE CLASSES HERE ###
-
 class ImageSprite(Sprite):
-   def __init__(self, x, y, filename):                    # NEW sprite at (x,y)
-       Sprite.__init__(self)                              # init the Sprite object
-       self.image = image.load(filename).convert()        # loads the image from filename as the sprite
-       self.rect = self.image.get_rect()                  # creates the rectangle around the sprite
-       self.rect.center = (x//2,y//2)
+    def __init__(self, x, y, filename):                    # NEW sprite at (x,y)
+        Sprite.__init__(self)                              # init the Sprite object
+        self.image = image.load(filename).convert()        # loads the image from filename as the sprite
+        self.rect = self.image.get_rect()
 
-   # semi-optional part
-   def update(self):
-       ### ADD MOVEMENT MODIFIERS HERE ###
-       self.rect.x += 5
-       self.rect.y -= 2
-       self.rect.center = (self.rect.x//2,self.rect.y//2)
+        self.rect.x = x
+        self.rect.y = y# creates the rectangle around the sprite
 
-   def setPosition(self, x, y):
-       self.rect.x = x
-       self.rect.y = y
+    # semi-optional part
+    def update(self):
+        ### ADD MOVEMENT MODIFIERS HERE ###
+        pass
 
-   def changeImage(self, filename):
-       self.image = image.load(filename).convert()
+    def setPosition(self, x, y):
+        self.rect.x = x
+        self.rect.y = y
+
+    def changeImage(self, filename):
+        self.image = image.load(filename).convert()
 
 class PlayerSprite(ImageSprite):
-   def moveHorizontal(self, direction):
+    def moveHorizontal(self, direction):
         self.rect.x += 5 * direction
 
-   def moveVertical(self, direction):
+    def moveVertical(self, direction):
         self.rect.y += 5 * direction
 
 ### ADD SPRITE INSTANCES HERE ###
-player = PlayerSprite(0, 0, "mario.png")
+player = PlayerSprite(900, 500, "mario.png")
 player.image = pygame.transform.scale_by(player.image, 0.3)
-player.setPosition(screen.get_width() / 2, screen.get_height() / 2)
+player.rect = player.image.get_rect(topleft=(900, 500))
 
 dice1 = "Assets/Sprites/Dice/Dice1.png"
 dice2 = "Assets/Sprites/Dice/Dice2.png"
@@ -82,9 +114,8 @@ dice5 = "Assets/Sprites/Dice/Dice5.png"
 dice6 = "Assets/Sprites/Dice/Dice6.png"
 emptyDice = "Assets/Sprites/Dice/EmptyDice.png"
 
-dice = ImageSprite(0, 0, emptyDice)
+dice = ImageSprite(1800, 950, emptyDice)
 dice.image = pygame.transform.scale_by(dice.image, 5)
-dice.setPosition(1800, 950)
 
 ### SOUND INITIALIZATION ###
 diceRollSound = pygame.mixer.Sound("Assets/Audio/DiceRoll.mp3")
@@ -112,6 +143,23 @@ def changeDiceImage(num):
         dice.changeImage(dice6)
     dice.image = pygame.transform.scale_by(dice.image, 5)
 
+def drawGrid():
+    for rowIndex, row in enumerate(gridMap):
+        for columnIndex, tileType in enumerate(row):
+            x = columnIndex * TILE_SIZE
+            y = rowIndex * TILE_SIZE
+
+            tileRect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
+
+            if tileType == 0:
+                pygame.draw.rect(screen, DARK_GREY, tileRect)     # Regular floor panel
+            elif tileType == 1:
+                pygame.draw.rect(screen, LIGHT_GREY, tileRect)    # Structural Wall
+
+            # Draw grid cell outlines for a technical sci-fi layout appearance
+            pygame.draw.rect(screen, GRID_LINE, tileRect, 1)
+
+
 # group sprites
 allSprites = pygame.sprite.Group(player, dice)
 
@@ -137,19 +185,29 @@ while running:
     keys = pygame.key.get_pressed()
 
     if keys[K_LEFT] or keys[K_a]:
-         player.moveHorizontal(-1)
+        player.moveHorizontal(-1)
+        if player.rect.collidelist(wallRects) != -1:
+            player.moveHorizontal(1)
     if keys[K_RIGHT] or keys[K_d]:
         player.moveHorizontal(1)
+        if player.rect.collidelist(wallRects) != -1:
+            player.moveHorizontal(-1)
     if keys[K_UP] or keys[K_w]:
         player.moveVertical(-1)
+        if player.rect.collidelist(wallRects) != -1:
+            player.moveVertical(1)
     if keys[K_DOWN] or keys[K_s]:
         player.moveVertical(1)
+        if player.rect.collidelist(wallRects) != -1:
+            player.moveVertical(-1)
 
     # game loop drawing
     ### ADD ANY GAME LOOP DRAWINGS HERE ###
 
     # background fill
     screen.fill(BGCOLOUR)
+
+    drawGrid()
 
     # update position of sprites
 
