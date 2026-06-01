@@ -76,11 +76,11 @@ for rowIndex, row in enumerate(gridMap):
 class ImageSprite(Sprite):
     def __init__(self, x, y, filename):                    # NEW sprite at (x,y)
         Sprite.__init__(self)                              # init the Sprite object
-        self.image = image.load(filename).convert()        # loads the image from filename as the sprite
+        self.image = image.load(filename).convert_alpha()      # loads the image from filename as the sprite
         self.rect = self.image.get_rect()
 
         self.rect.x = x
-        self.rect.y = y# creates the rectangle around the sprite
+        self.rect.y = y
 
     # semi-optional part
     def update(self):
@@ -102,9 +102,10 @@ class PlayerSprite(ImageSprite):
         self.rect.y += 5 * direction
 
 ### ADD SPRITE INSTANCES HERE ###
-player = PlayerSprite(900, 500, "mario.png")
-player.image = pygame.transform.scale_by(player.image, 0.3)
+player = PlayerSprite(900, 500, "Assets/Sprites/Player/Forward/forward_idle.png")
+player.image = pygame.transform.scale_by(player.image, 4)
 player.rect = player.image.get_rect(topleft=(900, 500))
+player.rect = player.rect.inflate(-40, -40)
 
 dice1 = "Assets/Sprites/Dice/Dice1.png"
 dice2 = "Assets/Sprites/Dice/Dice2.png"
@@ -200,6 +201,8 @@ while running:
         player.moveVertical(1)
         if player.rect.collidelist(wallRects) != -1:
             player.moveVertical(-1)
+    if keys[K_ESCAPE]:
+        pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     # game loop drawing
     ### ADD ANY GAME LOOP DRAWINGS HERE ###
