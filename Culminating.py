@@ -10,6 +10,7 @@ from pygame.sprite import *
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
+DARK_RED = (100, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 DARK_GREY = (40, 44, 52)      # Station flooring color
@@ -36,17 +37,24 @@ MAIN_MENU = "main_menu"
 IN_GAME = "in_game"
 scene = MAIN_MENU
 
-EASY = 15000
-MEDIUM = 10000
-HARD = 5000
+EASY = 15
+MEDIUM = 10
+HARD = 5
 currentDifficulty = EASY
 
-# Timer creation
-TIMER_EVENT = pygame.USEREVENT + 1
-pygame.time.set_timer(TIMER_EVENT, currentDifficulty)
+# Dice roll timer creation
+DICE_ROLL_EVENT = pygame.USEREVENT + 1
+pygame.time.set_timer(DICE_ROLL_EVENT, currentDifficulty * 1000)
+
+# Damage timer creation
+DAMAGE_EVENT = pygame.USEREVENT + 2
+MIN_TIME = 1
+MAX_TIME = 5
+randomDelay = random.randint(MIN_TIME * 1000, MAX_TIME * 1000)
+pygame.time.set_timer(DAMAGE_EVENT, randomDelay)
 
 # MAP LAYOUT DATA
-# 0 = Normal Floor, 1 = Obstacle
+# 0 = Normal Floor, 1 = Obstacle, 2 = Damaged Floor, 3 = Damaged Wall
 # Calculates the sizes to fill up the entire window
 COLS = screen.get_width() // TILE_SIZE + 1
 ROWS = screen.get_height() // TILE_SIZE + 1
@@ -72,6 +80,21 @@ for rowIndex, row in enumerate(gridMap):
             y = rowIndex * TILE_SIZE
             wallRects.append(pygame.Rect(x, y, TILE_SIZE, TILE_SIZE))
 
+# Powerup creation
+speedMultiplier = 1
+repairMultiplier = 1
+timerMultiplier = 1
+
+chosenPowerup = ""
+
+powerups = [
+    "speed", "faster repair", "slower timer"
+]
+
+debuffs = [
+    "slowness", "slower repair", "faster timer"
+]
+
 ### ADD YOUR SPRITE CLASSES HERE ###
 class ImageSprite(Sprite):
     def __init__(self, x, y, filename):                    # NEW sprite at (x,y)
@@ -96,10 +119,10 @@ class ImageSprite(Sprite):
 
 class PlayerSprite(ImageSprite):
     def moveHorizontal(self, direction):
-        self.rect.x += 5 * direction
+        self.rect.x += 5 * direction * speedMultiplier
 
     def moveVertical(self, direction):
-        self.rect.y += 5 * direction
+        self.rect.y += 5 * direction * speedMultiplier
 
 ### ADD SPRITE INSTANCES HERE ###
 player = PlayerSprite(900, 500, "Assets/Sprites/Player/Forward/forward_idle.png")
@@ -120,6 +143,7 @@ dice.image = pygame.transform.scale_by(dice.image, 5)
 
 ### SOUND INITIALIZATION ###
 diceRollSound = pygame.mixer.Sound("Assets/Audio/DiceRoll.mp3")
+panelSparkSound = pygame.mixer.Sound("Assets/Audio/PanelSpark.mp3")
 
 ### OTHER CLASSES OR FUNCTIONS ###
 def rollDice(numberOfDice):
@@ -130,19 +154,49 @@ def rollDice(numberOfDice):
     return number
 
 def changeDiceImage(num):
+    global chosenPowerup
     if num == 1:
         dice.changeImage(dice1)
+        chosenPowerup = random.choice(debuffs)
     elif num == 2:
         dice.changeImage(dice2)
+        chosenPowerup = random.choice(debuffs)
     elif num == 3:
         dice.changeImage(dice3)
     elif num == 4:
         dice.changeImage(dice4)
     elif num == 5:
         dice.changeImage(dice5)
+        chosenPowerup = random.choice(powerups)
     elif num == 6:
         dice.changeImage(dice6)
+        chosenPowerup = random.choice(powerups)
     dice.image = pygame.transform.scale_by(dice.image, 5)
+    applyEffect(chosenPowerup)
+    print(chosenPowerup)
+
+def applyEffect(effect):
+    global speedMultiplier
+    global repairMultiplier
+    global timerMultiplier
+
+    match effect:
+        case "speed":
+            speedMultiplier = 2
+        case "faster repair":
+            repairMultiplier = 2
+        case "slower timer":
+            timerMultiplier = 0.5
+        case "slowness":
+            speedMultiplier = 0.5
+        case "slower repair":
+            repairMultiplier = 0.5
+        case "faster timer":
+            timerMultiplier = 2
+        case _:
+            speedMultiplier = 1
+            repairMultiplier = 1
+            timerMultiplier = 1
 
 def drawGrid():
     for rowIndex, row in enumerate(gridMap):
@@ -153,13 +207,30 @@ def drawGrid():
             tileRect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
 
             if tileType == 0:
-                pygame.draw.rect(screen, DARK_GREY, tileRect)     # Regular floor panel
+                pygame.draw.rect(screen, DARK_GREY, tileRect)
             elif tileType == 1:
-                pygame.draw.rect(screen, LIGHT_GREY, tileRect)    # Structural Wall
+                pygame.draw.rect(screen, LIGHT_GREY, tileRect)
+            elif tileType == 2:
+                pygame.draw.rect(screen, DARK_RED, tileRect)
+            elif tileType == 3:
+                pygame.draw.rect(screen, RED, tileRect)
 
             # Draw grid cell outlines for a technical sci-fi layout appearance
             pygame.draw.rect(screen, GRID_LINE, tileRect, 1)
 
+def damageTile(row, column):
+    if gridMap[row][column] == 0:
+        gridMap[row][column] = 2
+        panelSparkSound.play()
+    elif gridMap[row][column] == 1:
+        gridMap[row][column] = 3
+        panelSparkSound.play()
+
+def repairTile(row, column):
+    if gridMap[row][column] == 2:
+        gridMap[row][column] = 0
+    elif gridMap[row][column] == 3:
+        gridMap[row][column] = 1
 
 # group sprites
 allSprites = pygame.sprite.Group(player, dice)
@@ -173,9 +244,20 @@ while running:
     for event in pygame.event.get():
         if event.type == QUIT:
             running = False
-        elif event.type == TIMER_EVENT:
+        # ROLLS DICE
+        elif event.type == DICE_ROLL_EVENT:
             currentDiceNumber = rollDice(1)
             changeDiceImage(currentDiceNumber)
+        # CAUSES DAMAGE
+        elif event.type == DAMAGE_EVENT:
+            # Picks a random tile to damage
+            randomRow = random.randint(0, len(gridMap) - 1)
+            randomColumn = random.randint(0, len(gridMap[randomRow]) - 1)
+            damageTile(randomRow, randomColumn)
+
+            # Reset the timer to cause a random delay
+            nextDelay = random.randint(MIN_TIME * 1000, MAX_TIME * 1000)
+            pygame.time.set_timer(DAMAGE_EVENT, nextDelay)
 
         ### ADD ANY OTHER EVENTS HERE (KEYS, MOUSE, ETC.) ###
 
@@ -185,6 +267,7 @@ while running:
     # check for keypresses
     keys = pygame.key.get_pressed()
 
+    # PLAYER MOVEMENT
     if keys[K_LEFT] or keys[K_a]:
         player.moveHorizontal(-1)
         if player.rect.collidelist(wallRects) != -1:
@@ -201,6 +284,8 @@ while running:
         player.moveVertical(1)
         if player.rect.collidelist(wallRects) != -1:
             player.moveVertical(-1)
+
+    # QUIT GAME
     if keys[K_ESCAPE]:
         pygame.event.post(pygame.event.Event(pygame.QUIT))
 
