@@ -71,7 +71,7 @@ gridMap = [
     [1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
     [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
     [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ]
@@ -79,7 +79,7 @@ gridMap = [
 wallRects = []
 for rowIndex, row in enumerate(gridMap):
     for columnIndex, tileType in enumerate(row):
-        if tileType == 1:
+        if tileType == 1 or tileType == 3:
             x = columnIndex * TILE_SIZE
             y = rowIndex * TILE_SIZE
             wallRects.append(pygame.Rect(x, y, TILE_SIZE, TILE_SIZE))
@@ -122,11 +122,59 @@ class ImageSprite(Sprite):
         self.image = image.load(filename).convert()
 
 class PlayerSprite(ImageSprite):
+    def __init__(self, x, y, filename):
+        super().__init__(x, y, filename)
+
+        self.rightMovementFrames = [
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Forward/forward0.png").convert_alpha(), 4),
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Forward/forward1.png").convert_alpha(), 4),
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Forward/forward2.png").convert_alpha(), 4),
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Forward/forward3.png").convert_alpha(), 4),
+        ]
+
+        self.leftMovementFrames = [
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Backward/backward0.png").convert_alpha(), 4),
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Backward/backward1.png").convert_alpha(), 4),
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Backward/backward2.png").convert_alpha(), 4),
+            pygame.transform.scale_by(pygame.image.load("Assets/Sprites/Player/Backward/backward3.png").convert_alpha(), 4),
+        ]
+
+        self.idleFrame = pygame.transform.scale_by(pygame.image.load(filename).convert_alpha(), 4)
+
+        self.currentFrameIndex = 0
+        self.animationSpeed = 0.15
+        self.facingDirection = "right"
+        self.isMoving = False
+
     def moveHorizontal(self, direction):
         self.rect.x += 5 * direction * speedMultiplier
+        self.isMoving = True
+        if direction > 0:
+            self.facingDirection = "right"
+        elif direction < 0:
+            self.facingDirection = "left"
 
     def moveVertical(self, direction):
         self.rect.y += 5 * direction * speedMultiplier
+        self.isMoving = True
+
+    def update(self):
+        if self.isMoving:
+            self.currentFrameIndex += self.animationSpeed
+
+            if self.facingDirection == "right":
+                if self.currentFrameIndex >= len(self.rightMovementFrames):
+                    self.currentFrameIndex = 0
+                self.image = self.rightMovementFrames[int(self.currentFrameIndex)]
+            elif self.facingDirection == "left":
+                if self.currentFrameIndex >= len(self.leftMovementFrames):
+                    self.currentFrameIndex = 0
+                self.image = self.leftMovementFrames[int(self.currentFrameIndex)]
+        else:
+            self.image = self.idleFrame
+            self.currentFrameIndex = 0
+
+        self.isMoving = False
 
 ### ADD SPRITE INSTANCES HERE ###
 player = PlayerSprite(900, 500, "Assets/Sprites/Player/Forward/forward_idle.png")
@@ -142,6 +190,9 @@ damagedTileImage = pygame.transform.scale(damagedTileImage, (TILE_SIZE, TILE_SIZ
 
 wallTileImage = pygame.image.load("Assets/Sprites/Map/SpaceWallTile.png").convert()
 wallTileImage = pygame.transform.scale(wallTileImage, (TILE_SIZE, TILE_SIZE))
+
+generatorTileImage = pygame.image.load("Assets/Sprites/Map/GeneratorDesign.png").convert_alpha()
+generatorTileImage = pygame.transform.scale(generatorTileImage, (TILE_SIZE, TILE_SIZE))
 
 dice1 = "Assets/Sprites/Dice/Dice1.png"
 dice2 = "Assets/Sprites/Dice/Dice2.png"
@@ -230,7 +281,7 @@ def drawGrid():
                 #pygame.draw.rect(screen, DARK_RED, tileRect)
                 screen.blit(damagedTileImage, (x, y))
             elif tileType == 3:
-                pygame.draw.rect(screen, RED, tileRect)
+                screen.blit(generatorTileImage, (x, y))
 
             # Draw grid cell outlines for a technical sci-fi layout appearance
             pygame.draw.rect(screen, GRID_LINE, tileRect, 1)
@@ -280,6 +331,7 @@ while running:
 
     # game loop updates (including movement)
     ### ADD ANY GAME LOOP UPDATES HERE ###
+    allSprites.update()
 
     # check for keypresses
     keys = pygame.key.get_pressed()
@@ -339,7 +391,7 @@ while running:
     else:
         timerSurface = timerFont.render(timerString, True, RED)
 
-    timerRect = timerSurface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+    timerRect = timerSurface.get_rect(midtop=(screen.get_width() // 2, 20))
 
     screen.blit(timerSurface, timerRect)
     # update position of sprites
@@ -348,7 +400,7 @@ while running:
     # render sprites on screen
     allSprites.draw(screen)
 
-    # ***AFTER*** drawing everthing, flip (update) the display
+    # ***AFTER*** drawing everything, flip (update) the display
     pygame.display.flip()
 
 pygame.quit()
