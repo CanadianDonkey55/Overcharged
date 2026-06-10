@@ -42,6 +42,10 @@ MEDIUM = 10
 HARD = 5
 currentDifficulty = EASY
 
+# On screen timer
+timerFont = pygame.font.SysFont("Arial", 50)
+TIMER_SECONDS = 600
+
 # Dice roll timer creation
 DICE_ROLL_EVENT = pygame.USEREVENT + 1
 pygame.time.set_timer(DICE_ROLL_EVENT, currentDifficulty * 1000)
@@ -130,6 +134,15 @@ player.image = pygame.transform.scale_by(player.image, 4)
 player.rect = player.image.get_rect(topleft=(900, 500))
 player.rect = player.rect.inflate(-40, -40)
 
+floorTileImage = pygame.image.load("Assets/Sprites/Map/SpaceFloorTile.png").convert()
+floorTileImage = pygame.transform.scale(floorTileImage, (TILE_SIZE, TILE_SIZE))
+
+damagedTileImage = pygame.image.load("Assets/Sprites/Map/DamagedSpaceTile.png").convert()
+damagedTileImage = pygame.transform.scale(damagedTileImage, (TILE_SIZE, TILE_SIZE))
+
+wallTileImage = pygame.image.load("Assets/Sprites/Map/SpaceWallTile.png").convert()
+wallTileImage = pygame.transform.scale(wallTileImage, (TILE_SIZE, TILE_SIZE))
+
 dice1 = "Assets/Sprites/Dice/Dice1.png"
 dice2 = "Assets/Sprites/Dice/Dice2.png"
 dice3 = "Assets/Sprites/Dice/Dice3.png"
@@ -144,6 +157,7 @@ dice.image = pygame.transform.scale_by(dice.image, 5)
 ### SOUND INITIALIZATION ###
 diceRollSound = pygame.mixer.Sound("Assets/Audio/DiceRoll.mp3")
 panelSparkSound = pygame.mixer.Sound("Assets/Audio/PanelSpark.mp3")
+wrenchRepairSound = pygame.mixer.Sound("Assets/Audio/Wrench.mp3")
 
 ### OTHER CLASSES OR FUNCTIONS ###
 def rollDice(numberOfDice):
@@ -188,7 +202,7 @@ def applyEffect(effect):
         case "slower timer":
             timerMultiplier = 0.5
         case "slowness":
-            speedMultiplier = 0.5
+            speedMultiplier = 0.75
         case "slower repair":
             repairMultiplier = 0.5
         case "faster timer":
@@ -207,11 +221,14 @@ def drawGrid():
             tileRect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
 
             if tileType == 0:
-                pygame.draw.rect(screen, DARK_GREY, tileRect)
+                #pygame.draw.rect(screen, DARK_GREY, tileRect)
+                screen.blit(floorTileImage, (x, y))
             elif tileType == 1:
-                pygame.draw.rect(screen, LIGHT_GREY, tileRect)
+                #pygame.draw.rect(screen, LIGHT_GREY, tileRect)
+                screen.blit(wallTileImage, (x, y))
             elif tileType == 2:
-                pygame.draw.rect(screen, DARK_RED, tileRect)
+                #pygame.draw.rect(screen, DARK_RED, tileRect)
+                screen.blit(damagedTileImage, (x, y))
             elif tileType == 3:
                 pygame.draw.rect(screen, RED, tileRect)
 
@@ -223,12 +240,12 @@ def damageTile(row, column):
         gridMap[row][column] = 2
         panelSparkSound.play()
     elif gridMap[row][column] == 1:
-        gridMap[row][column] = 3
-        panelSparkSound.play()
+        gridMap[row][column] = 1
 
 def repairTile(row, column):
     if gridMap[row][column] == 2:
         gridMap[row][column] = 0
+        wrenchRepairSound.play()
     elif gridMap[row][column] == 3:
         gridMap[row][column] = 1
 
@@ -285,6 +302,15 @@ while running:
         if player.rect.collidelist(wallRects) != -1:
             player.moveVertical(-1)
 
+    # REPAIR DAMAGE
+    if keys[K_e]:
+        playerRow = player.rect.centery // TILE_SIZE
+        playerColumn = player.rect.centerx // TILE_SIZE
+
+        if 0 <= playerRow < len(gridMap) and 0 <= playerColumn < len(gridMap[0]):
+            repairTile(playerRow, playerColumn)
+        #repairTile(1, 1)
+
     # QUIT GAME
     if keys[K_ESCAPE]:
         pygame.event.post(pygame.event.Event(pygame.QUIT))
@@ -297,6 +323,25 @@ while running:
 
     drawGrid()
 
+    # Display timer on screen
+    secondsPassed = pygame.time.get_ticks() // 1000
+    timeRemaining = TIMER_SECONDS - secondsPassed
+
+    if timeRemaining <= 0:
+        timeRemaining = 0
+
+    minutes = timeRemaining // 60
+    seconds = timeRemaining % 60
+
+    timerString = f"{minutes}:{seconds:02d}"
+    if timeRemaining > 30:
+        timerSurface = timerFont.render(timerString, True, WHITE)
+    else:
+        timerSurface = timerFont.render(timerString, True, RED)
+
+    timerRect = timerSurface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+
+    screen.blit(timerSurface, timerRect)
     # update position of sprites
 
 
