@@ -16,6 +16,7 @@ BLUE = (0, 0, 255)
 DARK_GREY = (40, 44, 52)      # Station flooring color
 LIGHT_GREY = (90, 95, 105)    # Station wall color
 GRID_LINE = (30, 30, 35)      # Grid overlay lines
+OVERLAY_COLOR = (20, 20, 20, 180) # Semi-transparent color for pause overlay
 ### ADD ANY OTHER COLOUR CONSTANTS HERE ###
 
 # define system constants
@@ -33,8 +34,10 @@ pygame.init()
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 clock = pygame.time.Clock()
 
+# --- GAME STATE CONSTANTS ---
 MAIN_MENU = "main_menu"
 IN_GAME = "in_game"
+PAUSED = "paused"
 scene = MAIN_MENU
 
 EASY = 15
@@ -42,9 +45,15 @@ MEDIUM = 10
 HARD = 5
 currentDifficulty = EASY
 
-# On screen timer
+# Fonts for on screen things
 timerFont = pygame.font.SysFont("Arial", 50)
+menuFont = pygame.font.SysFont("Arial", 40)
+titleFont = pygame.font.SysFont("Arial", 80, bold=True)
 TIMER_SECONDS = 600
+
+# Tracks total time elapsed during pauses to keep game clock accurate
+pausedTimeAccumulator = 0
+pauseStartTick = 0
 
 # Dice roll timer creation
 DICE_ROLL_EVENT = pygame.USEREVENT + 1
@@ -58,7 +67,7 @@ randomDelay = random.randint(MIN_TIME * 1000, MAX_TIME * 1000)
 pygame.time.set_timer(DAMAGE_EVENT, randomDelay)
 
 # MAP LAYOUT DATA
-# 0 = Normal Floor, 1 = Obstacle, 2 = Damaged Floor, 3 = Damaged Wall
+# 0 = Normal Floor, 1 = Wall, 2 = Damaged Floor, 3 = Generator
 # Calculates the sizes to fill up the entire window
 COLS = screen.get_width() // TILE_SIZE + 1
 ROWS = screen.get_height() // TILE_SIZE + 1
@@ -176,6 +185,50 @@ class PlayerSprite(ImageSprite):
 
         self.isMoving = False
 
+class ButtonSprite(Sprite):
+    def __init__(self, centerX, centerY, text, action, filename):
+        Sprite.__init__(self)
+        self.action = action
+        self.image = pygame.image.load(filename).convert_alpha()
+        textSurface = menuFont.render(text, True, WHITE)
+        textRect = textSurface.get_rect(center=(175, 30))
+        self.image.blit(textSurface, textRect)
+        self.rect = self.image.get_rect(center=(centerX, centerY))
+
+    def checkClick(self, mousePos):
+        if self.rect.collidepoint(mousePos):
+            self.action()
+
+### BUTTON FUNCTIONS ###
+def startGame():
+    global scene, pausedTimeAccumulator
+    scene = IN_GAME
+    pausedTimeAccumulator = pygame.time.get_ticks()
+
+def quitGame():
+    global running
+    running = False
+
+def resumeGame():
+    global scene, pausedTimeAccumulator, pauseStartTick
+    scene = IN_GAME
+    pausedTimeAccumulator += (pygame.time.get_ticks() - pauseStartTick)
+
+def returnToMenu():
+    global scene
+    scene = MAIN_MENU
+
+### BUTTON SPRITE INSTANCES ###
+menuPlayButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2, "Start Shift", startGame, "Assets/Sprites/UI/Button.png")
+menuQuitButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2 + 80, "Abandon Ship", quitGame, "Assets/Sprites/UI/Button.png")
+
+pauseResumeButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2, "Resume Shift", resumeGame, "Assets/Sprites/UI/Button.png")
+pauseQuitButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2 + 80, "Return to Menu", returnToMenu, "Assets/Sprites/UI/Button.png")
+
+# Group handling for UI
+mainMenuButtons = pygame.sprite.Group(menuPlayButton, menuQuitButton)
+pauseMenuButtons = pygame.sprite.Group(pauseResumeButton, pauseQuitButton)
+
 ### ADD SPRITE INSTANCES HERE ###
 player = PlayerSprite(900, 500, "Assets/Sprites/Player/Forward/forward_idle.png")
 player.image = pygame.transform.scale_by(player.image, 4)
@@ -272,18 +325,14 @@ def drawGrid():
             tileRect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
 
             if tileType == 0:
-                #pygame.draw.rect(screen, DARK_GREY, tileRect)
                 screen.blit(floorTileImage, (x, y))
             elif tileType == 1:
-                #pygame.draw.rect(screen, LIGHT_GREY, tileRect)
                 screen.blit(wallTileImage, (x, y))
             elif tileType == 2:
-                #pygame.draw.rect(screen, DARK_RED, tileRect)
                 screen.blit(damagedTileImage, (x, y))
             elif tileType == 3:
                 screen.blit(generatorTileImage, (x, y))
 
-            # Draw grid cell outlines for a technical sci-fi layout appearance
             pygame.draw.rect(screen, GRID_LINE, tileRect, 1)
 
 def damageTile(row, column):
@@ -300,6 +349,27 @@ def repairTile(row, column):
     elif gridMap[row][column] == 3:
         gridMap[row][column] = 1
 
+def drawMainMenu():
+    screen.fill(BLACK)
+
+    titleSurface = titleFont.render("OVERCHARGED", True, RED)
+    titleRect = titleSurface.get_rect(center=(screen.get_width() // 2, screen.get_height() // 3))
+    screen.blit(titleSurface, titleRect)
+
+    mainMenuButtons.draw(screen)
+
+def drawPauseMenu():
+    # Dims the background game scene using a transparency layer
+    overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+    overlay.fill(OVERLAY_COLOR)
+    screen.blit(overlay, (0, 0))
+
+    pauseSurface = titleFont.render("SHIFT PAUSED", True, WHITE)
+    pauseRect = pauseSurface.get_rect(center=(screen.get_width() // 2, screen.get_height() // 3))
+    screen.blit(pauseSurface, pauseRect)
+
+    pauseMenuButtons.draw(screen)
+
 # group sprites
 allSprites = pygame.sprite.Group(player, dice)
 
@@ -308,97 +378,113 @@ running = True
 while running:
     # keep loop running at the right speed
     clock.tick(FPS)
+
     # process input (events)
     for event in pygame.event.get():
         if event.type == QUIT:
             running = False
-        # ROLLS DICE
-        elif event.type == DICE_ROLL_EVENT:
-            currentDiceNumber = rollDice(1)
-            changeDiceImage(currentDiceNumber)
-        # CAUSES DAMAGE
-        elif event.type == DAMAGE_EVENT:
-            # Picks a random tile to damage
-            randomRow = random.randint(0, len(gridMap) - 1)
-            randomColumn = random.randint(0, len(gridMap[randomRow]) - 1)
-            damageTile(randomRow, randomColumn)
 
-            # Reset the timer to cause a random delay
-            nextDelay = random.randint(MIN_TIME * 1000, MAX_TIME * 1000)
-            pygame.time.set_timer(DAMAGE_EVENT, nextDelay)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1: # Left click
+                mousePos = pygame.mouse.get_pos()
+                if scene == MAIN_MENU:
+                    for button in mainMenuButtons:
+                        button.checkClick(mousePos)
+                elif scene == PAUSED:
+                    for button in pauseMenuButtons:
+                        button.checkClick(mousePos)
 
-        ### ADD ANY OTHER EVENTS HERE (KEYS, MOUSE, ETC.) ###
+        elif event.type == pygame.KEYUP:
+            if scene == IN_GAME:
+                if event.key == pygame.K_ESCAPE:
+                    scene = PAUSED
+                    pauseStartTick = pygame.time.get_ticks()
+            elif scene == PAUSED:
+                if event.key == pygame.K_ESCAPE:
+                    resumeGame()
 
-    # game loop updates (including movement)
-    ### ADD ANY GAME LOOP UPDATES HERE ###
-    allSprites.update()
+        if scene == IN_GAME:
+            # ROLLS DICE
+            if event.type == DICE_ROLL_EVENT:
+                currentDiceNumber = rollDice(1)
+                changeDiceImage(currentDiceNumber)
+            # CAUSES DAMAGE
+            elif event.type == DAMAGE_EVENT:
+                # Picks a random tile to damage
+                randomRow = random.randint(0, len(gridMap) - 1)
+                randomColumn = random.randint(0, len(gridMap[randomRow]) - 1)
+                damageTile(randomRow, randomColumn)
 
-    # check for keypresses
-    keys = pygame.key.get_pressed()
+                # Reset the timer to cause a random delay
+                nextDelay = random.randint(MIN_TIME * 1000, MAX_TIME * 1000)
+                pygame.time.set_timer(DAMAGE_EVENT, nextDelay)
 
-    # PLAYER MOVEMENT
-    if keys[K_LEFT] or keys[K_a]:
-        player.moveHorizontal(-1)
-        if player.rect.collidelist(wallRects) != -1:
-            player.moveHorizontal(1)
-    if keys[K_RIGHT] or keys[K_d]:
-        player.moveHorizontal(1)
-        if player.rect.collidelist(wallRects) != -1:
+    # Game state handling
+    if scene == MAIN_MENU:
+        drawMainMenu()
+
+    elif scene == PAUSED:
+        drawPauseMenu()
+
+    elif scene == IN_GAME:
+        # game loop updates (including movement)
+        allSprites.update()
+
+        # check for keypresses
+        keys = pygame.key.get_pressed()
+
+        # PLAYER MOVEMENT
+        if keys[K_LEFT] or keys[K_a]:
             player.moveHorizontal(-1)
-    if keys[K_UP] or keys[K_w]:
-        player.moveVertical(-1)
-        if player.rect.collidelist(wallRects) != -1:
-            player.moveVertical(1)
-    if keys[K_DOWN] or keys[K_s]:
-        player.moveVertical(1)
-        if player.rect.collidelist(wallRects) != -1:
+            if player.rect.collidelist(wallRects) != -1:
+                player.moveHorizontal(1)
+        if keys[K_RIGHT] or keys[K_d]:
+            player.moveHorizontal(1)
+            if player.rect.collidelist(wallRects) != -1:
+                player.moveHorizontal(-1)
+        if keys[K_UP] or keys[K_w]:
             player.moveVertical(-1)
+            if player.rect.collidelist(wallRects) != -1:
+                player.moveVertical(1)
+        if keys[K_DOWN] or keys[K_s]:
+            player.moveVertical(1)
+            if player.rect.collidelist(wallRects) != -1:
+                player.moveVertical(-1)
 
-    # REPAIR DAMAGE
-    if keys[K_e]:
-        playerRow = player.rect.centery // TILE_SIZE
-        playerColumn = player.rect.centerx // TILE_SIZE
+        # REPAIR DAMAGE
+        if keys[K_e]:
+            playerRow = player.rect.centery // TILE_SIZE
+            playerColumn = player.rect.centerx // TILE_SIZE
 
-        if 0 <= playerRow < len(gridMap) and 0 <= playerColumn < len(gridMap[0]):
-            repairTile(playerRow, playerColumn)
-        #repairTile(1, 1)
+            if 0 <= playerRow < len(gridMap) and 0 <= playerColumn < len(gridMap[0]):
+                repairTile(playerRow, playerColumn)
 
-    # QUIT GAME
-    if keys[K_ESCAPE]:
-        pygame.event.post(pygame.event.Event(pygame.QUIT))
+        # background fill
+        screen.fill(BGCOLOUR)
 
-    # game loop drawing
-    ### ADD ANY GAME LOOP DRAWINGS HERE ###
+        drawGrid()
 
-    # background fill
-    screen.fill(BGCOLOUR)
+        # Display timer on screen with adjustments for pause times
+        secondsPassed = (pygame.time.get_ticks() - pausedTimeAccumulator) // 1000
+        timeRemaining = TIMER_SECONDS - secondsPassed
 
-    drawGrid()
+        if timeRemaining <= 0:
+            timeRemaining = 0
 
-    # Display timer on screen
-    secondsPassed = pygame.time.get_ticks() // 1000
-    timeRemaining = TIMER_SECONDS - secondsPassed
+        minutes = timeRemaining // 60
+        seconds = timeRemaining % 60
 
-    if timeRemaining <= 0:
-        timeRemaining = 0
+        timerString = f"{minutes}:{seconds:02d}"
+        if timeRemaining > 30:
+            timerSurface = timerFont.render(timerString, True, WHITE)
+        else:
+            timerSurface = timerFont.render(timerString, True, RED)
 
-    minutes = timeRemaining // 60
-    seconds = timeRemaining % 60
+        timerRect = timerSurface.get_rect(midtop=(screen.get_width() // 2, 20))
+        screen.blit(timerSurface, timerRect)
 
-    timerString = f"{minutes}:{seconds:02d}"
-    if timeRemaining > 30:
-        timerSurface = timerFont.render(timerString, True, WHITE)
-    else:
-        timerSurface = timerFont.render(timerString, True, RED)
-
-    timerRect = timerSurface.get_rect(midtop=(screen.get_width() // 2, 20))
-
-    screen.blit(timerSurface, timerRect)
-    # update position of sprites
-
-
-    # render sprites on screen
-    allSprites.draw(screen)
+        # render sprites on screen
+        allSprites.draw(screen)
 
     # ***AFTER*** drawing everything, flip (update) the display
     pygame.display.flip()
