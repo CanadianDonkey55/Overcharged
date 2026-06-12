@@ -1,5 +1,5 @@
 # Programmer(s): Devin Murphy, Jayden Li
-# Date:
+# Date: June 11th 2026
 # Description: Game about surviving a shift on a damaged space station.
 
 import random
@@ -24,9 +24,6 @@ OVERLAY_COLOR = (20, 20, 20, 180) # Semi-transparent color for pause overlay
 
 # define system constants
 FPS = 60
-#info = pygame.display.Info()
-WIDTH = 640
-HEIGHT = 480
 BGCOLOUR = BLACK ### CHANGE AS NEEDED ###
 
 # Changes the size of the tiles
@@ -42,15 +39,17 @@ MAIN_MENU = "main_menu"
 IN_GAME = "in_game"
 PAUSED = "paused"
 GAME_OVER = "game_over"
+WIN_SCREEN = "win_screen"
 WIRE_MINIGAME = "wire_minigame"
 scene = MAIN_MENU
+
+TIMER_SECONDS = 600
 
 # Fonts for on screen things
 timerFont = pygame.font.SysFont("Arial", 50)
 menuFont = pygame.font.SysFont("Arial", 40)
 titleFont = pygame.font.SysFont("Arial", 80, bold=True)
 uiFont = pygame.font.SysFont("Arial", 30, bold=True)
-TIMER_SECONDS = 600
 
 # Tracking variables for scaled time and repair stats
 gameTimeAccumulator = 0.0
@@ -107,11 +106,11 @@ timerMultiplier = 1
 chosenPowerup = ""
 
 powerups = [
-    "speed", "less repairs", "slower timer"
+    "speed", "less repairs", "faster timer"
 ]
 
 debuffs = [
-    "slowness", "increased repairs", "faster timer"
+    "slowness", "increased repairs", "slower timer"
 ]
 
 ### WIRE MINIGAME SYSTEMS ###
@@ -355,10 +354,13 @@ pauseQuitButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2
 
 gameOverQuitButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2 + 80, "Return to Menu", returnToMenu, "Assets/Sprites/UI/Button.png")
 
+winQuitButton = ButtonSprite(screen.get_width() // 2, screen.get_height() // 2 + 120, "Return to Menu", returnToMenu, "Assets/Sprites/UI/Button.png")
+
 # Group handling for UI
 mainMenuButtons = pygame.sprite.Group(menuPlayButton, menuQuitButton)
 pauseMenuButtons = pygame.sprite.Group(pauseResumeButton, pauseQuitButton)
 gameOverButtons = pygame.sprite.Group(gameOverQuitButton)
+winButtons = pygame.sprite.Group(winQuitButton)
 
 ### ADD SPRITE INSTANCES HERE ###
 player = PlayerSprite(900, 500, "Assets/Sprites/Player/Forward/forward_idle.png")
@@ -528,6 +530,22 @@ def drawGameOverMenu():
 
     gameOverButtons.draw(screen)
 
+def drawWinMenu():
+    overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+    overlay.fill((0, 120, 40, 120))
+    screen.blit(overlay, (0, 0))
+
+    winSurface = titleFont.render("SHIFT SURVIVED", True, GREEN)
+    winRect = winSurface.get_rect(center=(screen.get_width() // 2, screen.get_height() // 4))
+    screen.blit(winSurface, winRect)
+
+    # Display final score
+    scoreSurface = menuFont.render(f"Final Score: {tilesRepairedCount} Tiles Repaired", True, WHITE)
+    scoreRect = scoreSurface.get_rect(center=(screen.get_width() // 2, screen.get_height() // 4 + 80))
+    screen.blit(scoreSurface, scoreRect)
+
+    winButtons.draw(screen)
+
 # group sprites
 allSprites = pygame.sprite.Group(player, dice)
 
@@ -556,6 +574,9 @@ while running:
                         button.checkClick(mousePos)
                 elif scene == GAME_OVER:
                     for button in gameOverButtons:
+                        button.checkClick(mousePos)
+                elif scene == WIN_SCREEN:
+                    for button in winButtons:
                         button.checkClick(mousePos)
                 elif scene == WIRE_MINIGAME:
                     # Check if player clicked a Left terminal node matching target color
@@ -630,6 +651,10 @@ while running:
         drawGameOverMenu()
         lastTickTime = currentTickTime
 
+    elif scene == WIN_SCREEN:
+        drawWinMenu()
+        lastTickTime = currentTickTime
+
     elif scene == WIRE_MINIGAME:
         # Makes sure the timer continues while fixing the wire
         elapsedTimeThisFrame = currentTickTime - lastTickTime
@@ -644,7 +669,7 @@ while running:
         timeRemaining = TIMER_SECONDS - secondsPassed
         if timeRemaining <= 0:
             timeRemaining = 0
-            scene = GAME_OVER
+            scene = WIN_SCREEN
 
         minutes = timeRemaining // 60
         seconds = timeRemaining % 60
@@ -719,6 +744,7 @@ while running:
 
         if timeRemaining <= 0:
             timeRemaining = 0
+            scene = WIN_SCREEN
 
         # Adjust damage intervals for the last 4 minutes (240 seconds)
         if timeRemaining <= 240:
